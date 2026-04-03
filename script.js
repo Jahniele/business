@@ -4,111 +4,146 @@ const SUPABASE_KEY = "sb_secret_69f-SSYKMg1YGRvzik7jmw_0Ltzp55g";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// SHOW PAGE
+let currentUser = null;
+
+// 🔐 CHECK USER SESSION ON LOAD
+async function checkUser() {
+  const { data } = await supabaseClient.auth.getUser();
+  currentUser = data.user;
+
+  if (currentUser) {
+    renderApps();
+  }
+}
+checkUser();
+
+
+// 📄 SHOW PAGE
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
   document.getElementById(id).style.display = 'block';
   window.location.hash = id;
-  renderApps();
 }
+
 
 // INIT PAGE
 showPage(window.location.hash ? window.location.hash.substring(1) : 'home');
 
 
-// 🚀 CREATE APP (SAVE ONLINE)
-async function createApp() {
-  const nameEl = document.getElementById('appName');
-  const categoryEl = document.getElementById('appCategory');
+// 🔐 SIGN UP
+async function signUp() {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
 
-  const name = nameEl.value.trim();
-  const category = categoryEl.value.trim() || "General";
+  const { error } = await supabaseClient.auth.signUp({ email, password });
 
-  if (!name) return alert("⚠️ Enter app name!");
+  if (error) alert(error.message);
+  else alert("Check your email!");
+}
 
-  const { error } = await supabaseClient
-    .from('apps')
-    .insert([{ name, category }]);
 
-  if (error) {
-    alert("❌ Error saving app");
-    console.error(error);
-  } else {
-    alert("🎉 App saved ONLINE!");
-    nameEl.value = '';
-    categoryEl.value = '';
+// 🔐 LOGIN
+async function login() {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+
+  if (error) alert(error.message);
+  else {
+    currentUser = data.user;
+    alert("Logged in!");
     renderApps();
   }
 }
 
 
-// 📦 LOAD + DISPLAY APPS FROM DATABASE
-async function renderApps() {
-  const list = document.getElementById('appsList');
-  const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
+// 🔐 LOGOUT
+async function logout() {
+  await supabaseClient.auth.signOut();
+  currentUser = null;
+  document.getElementById('appsList').innerHTML = "";
+  alert("Logged out!");
+}
 
+
+// 🚀 CREATE APP (USER-SPECIFIC)
+async function createApp() {
+  if (!currentUser) return alert("⚠️ Login first!");
+
+  const nameEl = document.getElementById('appName');
+  const name = nameEl.value.trim();
+
+  if (!name) return alert("Enter app name!");
+
+  const { error } = await supabaseClient
+    .from('apps')
+    .insert([{
+      name,
+      user_id: currentUser.id
+    }]);
+
+  if (error) {
+    alert("Error saving app");
+    console.error(error);
+  } else {
+    nameEl.value = '';
+    renderApps();
+  }
+}
+
+
+// 📦 LOAD ONLY USER APPS
+async function renderApps() {
+  if (!currentUser) return;
+
+  const list = document.getElementById('appsList');
   list.innerHTML = "Loading...";
 
   const { data, error } = await supabaseClient
     .from('apps')
     .select('*')
+    .eq('user_id', currentUser.id)
     .order('id', { ascending: false });
 
   if (error) {
-    list.innerHTML = "❌ Error loading apps";
+    list.innerHTML = "Error loading";
     console.error(error);
     return;
   }
 
   list.innerHTML = '';
 
-  const filtered = data.filter(app =>
-    app.name.toLowerCase().includes(search) ||
-    app.category.toLowerCase().includes(search)
-  );
-
-  if (filtered.length === 0) {
-    list.innerHTML = "<p>No apps found.</p>";
+  if (data.length === 0) {
+    list.innerHTML = "<p>No apps yet</p>";
     return;
   }
 
-  filtered.forEach(app => {
-    const div = document.createElement('div');
-    div.className = 'app-card';
-    div.innerHTML = `
-      <strong>${app.name}</strong> [${app.category}]
-      <div>
-        <button onclick="editApp(${app.id}, '${app.name}')">✏️</button>
-        <button onclick="deleteApp(${app.id})">🗑️</button>
-      </div>
+  data.forEach(app => {
+    const li = document.createElement('li');
+    li.innerHTML = `
+      ${app.name}
+      <button onclick="editApp(${app.id}, '${app.name}')">✏️</button>
+      <button onclick="deleteApp(${app.id})">🗑️</button>
     `;
-    list.appendChild(div);
+    list.appendChild(li);
   });
-
-  const countEl = document.getElementById('appCount');
-  if (countEl) countEl.textContent = `Total Apps: ${filtered.length}`;
 }
 
 
-// 🗑️ DELETE APP
+// 🗑️ DELETE
 async function deleteApp(id) {
-  if (!confirm("Delete this app?")) return;
-
   const { error } = await supabaseClient
     .from('apps')
     .delete()
     .eq('id', id);
 
-  if (error) {
-    alert("Error deleting");
-    console.error(error);
-  } else {
-    renderApps();
-  }
+  if (error) console.error(error);
+  else renderApps();
 }
 
 
-// ✏️ EDIT APP
+// ✏️ EDIT
 async function editApp(id, oldName) {
   const newName = prompt("Edit app name:", oldName);
   if (!newName) return;
@@ -118,18 +153,8 @@ async function editApp(id, oldName) {
     .update({ name: newName.trim() })
     .eq('id', id);
 
-  if (error) {
-    alert("Error updating");
-    console.error(error);
-  } else {
-    renderApps();
-  }
-}
-
-
-// 🔍 SEARCH
-function filterApps() {
-  renderApps();
+  if (error) console.error(error);
+  else renderApps();
 }
 
 
@@ -137,7 +162,3 @@ function filterApps() {
 function toggleDarkMode() {
   document.body.classList.toggle('dark');
 }
-
-
-// 🔄 INITIAL LOAD
-renderApps();
