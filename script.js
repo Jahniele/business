@@ -1,12 +1,10 @@
-const SUPABASE_URL = "YOUR_URL_HERE";
-const SUPABASE_KEY = "YOUR_KEY_HERE";
+// 🔑 CONNECT TO SUPABASE
+const SUPABASE_URL = "https://grhpgvqtgbaevzuyeidu.supabase.co";
+const SUPABASE_KEY = "sb_secret_69f-SSYKMg1YGRvzik7jmw_0Ltzp55g";
 
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Load apps from localStorage
-let apps = JSON.parse(localStorage.getItem('apps') || '[]');
-
-// Show a specific page
+// SHOW PAGE
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
   document.getElementById(id).style.display = 'block';
@@ -14,104 +12,132 @@ function showPage(id) {
   renderApps();
 }
 
-// Initialize page based on URL hash
+// INIT PAGE
 showPage(window.location.hash ? window.location.hash.substring(1) : 'home');
 
-// Create a new app
-function createApp() {
+
+// 🚀 CREATE APP (SAVE ONLINE)
+async function createApp() {
   const nameEl = document.getElementById('appName');
   const categoryEl = document.getElementById('appCategory');
 
   const name = nameEl.value.trim();
   const category = categoryEl.value.trim() || "General";
 
-  if (!name) return alert("⚠️ Please enter an app name!");
+  if (!name) return alert("⚠️ Enter app name!");
 
-  // Prevent duplicate app names
-  if (apps.some(a => a.name.toLowerCase() === name.toLowerCase())) {
-    return alert(`⚠️ App "${name}" already exists!`);
+  const { error } = await supabaseClient
+    .from('apps')
+    .insert([{ name, category }]);
+
+  if (error) {
+    alert("❌ Error saving app");
+    console.error(error);
+  } else {
+    alert("🎉 App saved ONLINE!");
+    nameEl.value = '';
+    categoryEl.value = '';
+    renderApps();
   }
-
-  const app = { name, category, id: Date.now() };
-  apps.push(app);
-  localStorage.setItem('apps', JSON.stringify(apps));
-
-  // Clear inputs
-  nameEl.value = '';
-  categoryEl.value = '';
-
-  renderApps();
-  alert(`🎉 App "${name}" created!`);
 }
 
-// Render apps list
-function renderApps(filterCategory = '') {
+
+// 📦 LOAD + DISPLAY APPS FROM DATABASE
+async function renderApps() {
   const list = document.getElementById('appsList');
-  const search = document.getElementById('searchInput').value.toLowerCase();
-  list.innerHTML = '';
+  const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
 
-  const filteredApps = apps.filter(app => 
-    (app.name.toLowerCase().includes(search) || app.category.toLowerCase().includes(search)) &&
-    (filterCategory ? app.category === filterCategory : true)
-  );
+  list.innerHTML = "Loading...";
 
-  if(filteredApps.length === 0){
-    list.innerHTML = `<p>No apps found.</p>`;
+  const { data, error } = await supabaseClient
+    .from('apps')
+    .select('*')
+    .order('id', { ascending: false });
+
+  if (error) {
+    list.innerHTML = "❌ Error loading apps";
+    console.error(error);
     return;
   }
 
-  filteredApps.forEach(app => {
+  list.innerHTML = '';
+
+  const filtered = data.filter(app =>
+    app.name.toLowerCase().includes(search) ||
+    app.category.toLowerCase().includes(search)
+  );
+
+  if (filtered.length === 0) {
+    list.innerHTML = "<p>No apps found.</p>";
+    return;
+  }
+
+  filtered.forEach(app => {
     const div = document.createElement('div');
     div.className = 'app-card';
     div.innerHTML = `
       <strong>${app.name}</strong> [${app.category}]
       <div>
-        <button onclick="editApp(${app.id})">✏️ Edit</button>
-        <button onclick="deleteApp(${app.id})">🗑️ Delete</button>
+        <button onclick="editApp(${app.id}, '${app.name}')">✏️</button>
+        <button onclick="deleteApp(${app.id})">🗑️</button>
       </div>
     `;
     list.appendChild(div);
   });
 
-  // Update app count
   const countEl = document.getElementById('appCount');
-  if(countEl) countEl.textContent = `Total Apps: ${filteredApps.length}`;
+  if (countEl) countEl.textContent = `Total Apps: ${filtered.length}`;
 }
 
-// Delete an app
-function deleteApp(id) {
-  if(confirm("Are you sure you want to delete this app? 🗑️")) {
-    apps = apps.filter(a => a.id !== id);
-    localStorage.setItem('apps', JSON.stringify(apps));
+
+// 🗑️ DELETE APP
+async function deleteApp(id) {
+  if (!confirm("Delete this app?")) return;
+
+  const { error } = await supabaseClient
+    .from('apps')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    alert("Error deleting");
+    console.error(error);
+  } else {
     renderApps();
   }
 }
 
-// Edit an app
-function editApp(id) {
-  const app = apps.find(a => a.id === id);
-  const newName = prompt("Edit app name:", app.name);
-  if(newName) {
-    app.name = newName.trim();
-    localStorage.setItem('apps', JSON.stringify(apps));
+
+// ✏️ EDIT APP
+async function editApp(id, oldName) {
+  const newName = prompt("Edit app name:", oldName);
+  if (!newName) return;
+
+  const { error } = await supabaseClient
+    .from('apps')
+    .update({ name: newName.trim() })
+    .eq('id', id);
+
+  if (error) {
+    alert("Error updating");
+    console.error(error);
+  } else {
     renderApps();
   }
 }
 
-// Filter apps on search
+
+// 🔍 SEARCH
 function filterApps() {
   renderApps();
 }
 
-// Filter by category buttons (optional)
-function filterByCategory(category) {
-  renderApps(category);
-}
 
-// Dark mode toggle
+// 🌙 DARK MODE
 function toggleDarkMode() {
   document.body.classList.toggle('dark');
 }
 
-// Initial render
+
+// 🔄 INITIAL LOAD
 renderApps();
