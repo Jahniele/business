@@ -4,68 +4,158 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Builder</title>
+
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     .page { display: none; padding: 20px; border: 1px solid #ccc; margin-top: 10px; border-radius: 8px; }
     button { margin-right: 10px; padding: 8px 16px; cursor: pointer; }
   </style>
+
+  <!-- ✅ Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 </head>
 <body>
 
-  <h1>💻 AI Builder</h1>
+<h1>💻 AI Builder</h1>
 
-  <!-- Navigation -->
-  <button onclick="showPage('home')">Home</button>
-  <button onclick="showPage('builder')">Builder</button>
-  <button onclick="showPage('about')">About</button>
+<!-- 🔐 AUTH -->
+<div>
+  <h3>Login / Sign Up</h3>
+  <input type="email" id="email" placeholder="Email">
+  <input type="password" id="password" placeholder="Password">
+  <button onclick="signUp()">Sign Up</button>
+  <button onclick="login()">Login</button>
+  <button onclick="logout()">Logout</button>
+</div>
 
-  <!-- Pages -->
-  <div id="home" class="page">
-    <h2>Welcome Home</h2>
-<p>Test update</p>
-  </div>
+<hr>
 
-  <div id="builder" class="page">
-    <h2>AI Builder</h2>
-    <p>Enter your app name:</p>
-    <input type="text" id="appName" placeholder="App name">
-    <button onclick="createApp()">Create App</button>
+<!-- Navigation -->
+<button onclick="showPage('home')">Home</button>
+<button onclick="showPage('builder')">Builder</button>
+<button onclick="showPage('about')">About</button>
 
-    <h3>Your Apps:</h3>
-    <ul id="appsList"></ul>
-  </div>
+<!-- Pages -->
+<div id="home" class="page">
+  <h2>Welcome Home</h2>
+  <p>Test update</p>
+</div>
 
-  <div id="about" class="page">
-    <h2>About</h2>
-    <p>This is a fully functional single-page AI builder.</p>
-  </div>
+<div id="builder" class="page">
+  <h2>AI Builder</h2>
 
-  <script>
-    // Show selected page
-    function showPage(id) {
-      const pages = document.querySelectorAll('.page');
-      pages.forEach(p => p.style.display = 'none');
-      document.getElementById(id).style.display = 'block';
-      window.location.hash = id; // update URL
-    }
+  <p>Enter your app name:</p>
+  <input type="text" id="appName" placeholder="App name">
+  <button onclick="createApp()">Create App</button>
 
-    // Show home by default
-    showPage(window.location.hash ? window.location.hash.substring(1) : 'home');
+  <h3>Your Apps:</h3>
+  <ul id="appsList"></ul>
+</div>
 
-    // Simple app creation
-    function createApp() {
-      const nameInput = document.getElementById('appName');
-      const name = nameInput.value.trim();
-      if(!name) return alert("Enter a valid app name.");
+<div id="about" class="page">
+  <h2>About</h2>
+  <p>This is a fully functional AI builder with login system.</p>
+</div>
 
-      const appsList = document.getElementById('appsList');
-      const li = document.createElement('li');
-      li.textContent = name;
-      appsList.appendChild(li);
+<script>
+// 🔑 CONNECT SUPABASE (REPLACE THESE)
+const SUPABASE_URL = "YOUR_URL_HERE";
+const SUPABASE_KEY = "YOUR_KEY_HERE";
 
-      nameInput.value = "";
-    }
-  </script>
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser = null;
+
+// 🔐 SIGN UP
+async function signUp() {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+
+  const { error } = await supabaseClient.auth.signUp({ email, password });
+
+  if (error) alert(error.message);
+  else alert("Check your email!");
+}
+
+// 🔐 LOGIN
+async function login() {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+
+  if (error) alert(error.message);
+  else {
+    currentUser = data.user;
+    alert("Logged in!");
+    renderApps();
+  }
+}
+
+// 🔐 LOGOUT
+async function logout() {
+  await supabaseClient.auth.signOut();
+  currentUser = null;
+  alert("Logged out!");
+  document.getElementById('appsList').innerHTML = "";
+}
+
+// 📄 PAGE NAV
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+  document.getElementById(id).style.display = 'block';
+  window.location.hash = id;
+}
+
+// INIT PAGE
+showPage(window.location.hash ? window.location.hash.substring(1) : 'home');
+
+// 🚀 CREATE APP (SAVE ONLINE)
+async function createApp() {
+  if (!currentUser) return alert("Login first!");
+
+  const nameInput = document.getElementById('appName');
+  const name = nameInput.value.trim();
+
+  if (!name) return alert("Enter a valid app name.");
+
+  const { error } = await supabaseClient
+    .from('apps')
+    .insert([{ name, user_id: currentUser.id }]);
+
+  if (error) {
+    alert("Error saving app");
+    console.error(error);
+  } else {
+    nameInput.value = "";
+    renderApps();
+  }
+}
+
+// 📦 LOAD USER APPS
+async function renderApps() {
+  if (!currentUser) return;
+
+  const { data, error } = await supabaseClient
+    .from('apps')
+    .select('*')
+    .eq('user_id', currentUser.id);
+
+  const appsList = document.getElementById('appsList');
+  appsList.innerHTML = "";
+
+  if (error) {
+    appsList.innerHTML = "Error loading apps";
+    return;
+  }
+
+  data.forEach(app => {
+    const li = document.createElement('li');
+    li.textContent = app.name;
+    appsList.appendChild(li);
+  });
+}
+</script>
 
 </body>
 </html>
